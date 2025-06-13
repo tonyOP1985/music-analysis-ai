@@ -1,0 +1,16 @@
+# Core dependencies
+music21==9.1.0
+numpy==1.24.3
+pandas==2.0.3
+
+# For future phases
+fastapi==0.103.0
+uvicorn==0.23.2
+python-multipart==0.0.6
+
+# Utilities
+pathlib2==2.3.7
+python-dotenv==1.0.0
+
+# Logging and monitoring
+structlog==23.1.0

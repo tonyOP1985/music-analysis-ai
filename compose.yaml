@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  audiveris-processor:
+    build: .
+    container_name: music_processor
+    volumes:
+      # Mount your PDF files directory
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./temp:/app/temp
+    environment:
+      - JAVA_OPTS=-Xmx2g
+      - AUDIVERIS_HOME=/app/audiveris
+    # For interactive testing
+    stdin_open: true
+    tty: true
+    # Override default command for interactive mode
+    command: /bin/bash
+    
+  # Optional: Add a simple web interface later
+  web-interface:
+    build: .
+    container_name: music_web
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./input:/app/input
+      - ./output:/app/output
+    command: python3 -m uvicorn web_app:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - audiveris-processor
+    profiles:
+      - web
