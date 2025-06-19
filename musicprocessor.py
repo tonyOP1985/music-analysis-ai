@@ -11,18 +11,49 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class MusicProcessor:
-    def __init__(self, audiveris_path: str = "/app/audiveris"):
-        self.audiveris_path = Path(audiveris_path)
-        self.audiveris_jar = self.audiveris_path / "lib" / "audiveris.jar"
-        
-        # Check if Audiveris is properly installed
-        if not self.audiveris_jar.exists():
-            # Try alternative path
-            self.audiveris_jar = self.audiveris_path / "audiveris.jar"
+    def __init__(self, audiveris_path: str = None):
+        # For the toprock/audiveris Docker image
+        if audiveris_path is None:
+            # Try common locations in the toprock/audiveris image
+            possible_paths = [
+                "/audiveris/lib/audiveris.jar",
+                "/opt/audiveris/lib/audiveris.jar",
+                "/usr/local/audiveris/lib/audiveris.jar",
+                "/home/audiveris/audiveris/lib/audiveris.jar"
+            ]
+            
+            for path in possible_paths:
+                if Path(path).exists():
+                    self.audiveris_jar = Path(path)
+                    logger.info(f"Found Audiveris JAR at: {self.audiveris_jar}")
+                    break
+            else:
+                # Try to find audiveris.jar anywhere in the system
+                try:
+                    result = subprocess.run(['find', '/', '-name', 'audiveris.jar', '-type', 'f'], 
+                                          capture_output=True, text=True, timeout=30)
+                    if result.returncode == 0 and result.stdout.strip():
+                        jar_path = result.stdout.strip().split('\n')[0]
+                        self.audiveris_jar = Path(jar_path)
+                        logger.info(f"Found Audiveris JAR via search: {self.audiveris_jar}")
+                    else:
+                        # Try using system command
+                        cmd_result = subprocess.run(['which', 'audiveris'], capture_output=True, text=True)
+                        if cmd_result.returncode == 0:
+                            self.audiveris_jar = None  # Use system command
+                            logger.info("Using system-installed Audiveris command")
+                        else:
+                            raise FileNotFoundError("Audiveris not found")
+                except Exception as e:
+                    raise FileNotFoundError(f"Audiveris installation not found: {e}")
+        else:
+            self.audiveris_path = Path(audiveris_path)
+            self.audiveris_jar = self.audiveris_path / "lib" / "audiveris.jar"
+            
             if not self.audiveris_jar.exists():
-                raise FileNotFoundError(f"Audiveris JAR not found at {self.audiveris_jar}")
-        
-        logger.info(f"Audiveris JAR found at: {self.audiveris_jar}")
+                self.audiveris_jar = self.audiveris_path / "audiveris.jar"
+                if not self.audiveris_jar.exists():
+                    raise FileNotFoundError(f"Audiveris JAR not found at {self.audiveris_jar}")
     
     def process_pdf(self, pdf_path: str, output_dir: str, 
                    export_formats: list = None) -> Tuple[bool, str, Dict[str, Any]]:
@@ -51,13 +82,22 @@ class MusicProcessor:
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Prepare Audiveris command
-        cmd = [
-            'java',
-            '-Xmx2g',  # Allocate 2GB memory
-            '-jar', str(self.audiveris_jar),
-            '-batch',
-            '-export'
-        ]
+        if self.audiveris_jar:
+            # Using JAR file
+            cmd = [
+                'java',
+                '-Xmx2g',  # Allocate 2GB memory
+                '-jar', str(self.audiveris_jar),
+                '-batch',
+                '-export'
+            ]
+        else:
+            # Using system command
+            cmd = [
+                'audiveris',
+                '-batch',
+                '-export'
+            ]
         
         # Add export formats
         for fmt in export_formats:
@@ -78,7 +118,7 @@ class MusicProcessor:
                 capture_output=True, 
                 text=True, 
                 timeout=300,  # 5 minute timeout
-                cwd=str(self.audiveris_path)
+                cwd=str(self.audiveris_path) if hasattr(self, 'audiveris_path') else None
             )
             
             success = result.returncode == 0
